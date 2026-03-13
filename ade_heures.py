@@ -544,20 +544,3 @@ def main():
 if __name__ == '__main__':
     main()
 
-
-######## TEST #########
-input_path = "./ADECal_Akram.ics"
-output_path = 'Akram_ADE_heures.xlsx'
-
-print(f"Lecture de : {input_path}")
-raw_events = parse_ics(input_path)
-print(f"  {len(raw_events)} VEVENT trouves")
-
-records = process_events(raw_events)
-print(f"  {len(records)} evenements traites")
-
-print_summary(records)
-
-print(f"Generation du fichier Excel : {output_path}")
-generate_excel(records, output_path)
-print("Termine.")
