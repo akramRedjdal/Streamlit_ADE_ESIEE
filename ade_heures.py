@@ -138,9 +138,9 @@ MODALITY_PATTERNS = [
     ('Oraux',   re.compile(r'\bOraux\b',         re.IGNORECASE)),
     ('TDR',     re.compile(r'\bTDR\b',           re.IGNORECASE)),
     ('TP Seul', re.compile(r'\bTP\s+[Ss]eul\b',  re.IGNORECASE)),
-    ('CM',      re.compile(r'\bCM\b')),
-    ('TD',      re.compile(r'\bTD\b')),
-    ('TP',      re.compile(r'\bTP\b')),
+    ('CM',      re.compile(r'\bCM\d*\b')),
+    ('TD',      re.compile(r'\bTD\d*\b')),
+    ('TP',      re.compile(r'\bTP\d*\b')),
     ('Soutenance',   re.compile(r'\bSoutenance\b',        re.IGNORECASE)),
     ('CM-plus',   re.compile(r'\bCM\-plus\b',        re.IGNORECASE)),
     
@@ -188,6 +188,13 @@ def process_events(raw_events):
 
         promos, filieres = extract_codes(desc_lines)
         modality = detect_modality(desc_lines)
+
+        # Fallback : si la description ne donne aucune modalité, chercher dans le nom du cours
+        if modality == 'Autre' and summary:
+            for m, pattern in MODALITY_PATTERNS:
+                if pattern.search(summary):
+                    modality = m
+                    break
 
         # CM dispensé en E1 ou E2 → CM-plus (amphithéâtre, coefficient différent)
         if modality == 'CM' and any(re.match(r'^E[12]', p) for p in promos):
@@ -289,7 +296,7 @@ def _header_cell(cell, text):
 # -- Sheet 1: Detail --
 
 def write_detail_sheet(ws, records):
-    headers = ['Nom', 'Filiere', 'Promo', 'Date', 'Debut', 'Fin', 'Duree (h)', 'HETD (h)', 'HETP (h)', 'Lieu', 'Modalite', 'Description']
+    headers = ['Nom', 'Filiere', 'Promo', 'Date', 'Annee', 'Mois', 'Debut', 'Fin', 'Duree (h)', 'HETD (h)', 'HETP (h)', 'Lieu', 'Modalite', 'Description']
     for col, h in enumerate(headers, 1):
         _header_cell(ws.cell(row=1, column=col), h)
     ws.row_dimensions[1].height = 30
@@ -301,6 +308,8 @@ def write_detail_sheet(ws, records):
             rec['filiere'],
             rec['promo'],
             rec['dtstart'].strftime('%d/%m/%Y'),
+            rec['dtstart'].year,
+            rec['dtstart'].month,
             rec['dtstart'].strftime('%H:%M'),
             rec['dtend'].strftime('%H:%M'),
             round(rec['duration_h'], 2),
@@ -314,14 +323,14 @@ def write_detail_sheet(ws, records):
             cell = ws.cell(row=i, column=col, value=val)
             cell.fill   = PatternFill('solid', fgColor=bg)
             cell.border = BORDER_THIN
-            if col in (4, 5, 6, 7, 8, 9):
+            if col in (4, 5, 6, 7, 8, 9, 10, 11):
                 cell.alignment = Alignment(horizontal='center', vertical='top')
-            elif col == 12:
+            elif col == 14:
                 cell.alignment = Alignment(vertical='top', wrap_text=True)
             else:
                 cell.alignment = Alignment(vertical='top')
 
-    col_widths = [42, 22, 20, 12, 8, 8, 10, 10, 10, 20, 12, 60]
+    col_widths = [42, 22, 20, 12, 8, 8, 8, 8, 10, 10, 10, 20, 12, 60]
     for col, w in enumerate(col_widths, 1):
         ws.column_dimensions[get_column_letter(col)].width = w
 
@@ -416,9 +425,11 @@ def write_warnings_sheet(ws):
 
     warnings = [
         ('Principe',
-         'La modalite est extraite uniquement de la DERNIERE ligne non-vide du champ DESCRIPTION. '
-         'Cela evite les faux-positifs lies aux noms de cours (ex : "TP Capteurs"), '
-         'de salles (ex : "PER-5TP"), ou de noms propres contenant "CM", "TD" ou "TP".'),
+         'La modalite est extraite de la DERNIERE ligne non-vide du champ DESCRIPTION. '
+         'Si aucune modalite n\'est trouvee dans la description, le NOM du cours (champ SUMMARY) '
+         'est utilise en second recours. '
+         'La priorite a la description evite les faux-positifs lies aux noms de cours '
+         '(ex : "TP Capteurs") ou de salles (ex : "PER-5TP").'),
         ('Ordre de priorite',
          'CM/TD > Oraux > TDR > TP Seul > CM > TD > TP > Autre. '
          'Les patterns utilisent des limites de mots (\\b) pour eviter les faux-positifs partiels '
