@@ -268,6 +268,13 @@ with col_table:
         style_modality(summary_df.iloc[:-1]),  # sans la ligne TOTAL pour le style
         use_container_width=True,
         hide_index=True,
+        column_config={
+        "HETP": st.column_config.NumberColumn(format="%.2f"),
+        "HETD": st.column_config.NumberColumn(format="%.2f"),
+        "Heures": st.column_config.NumberColumn(format="%.2f"),
+        "Coeff HETP": st.column_config.NumberColumn(format="%.2f"),
+        "Coeff HETD": st.column_config.NumberColumn(format="%.2f"),
+    },
     )
     # Ligne TOTAL en gras sous le tableau
     total_row = summary_df.iloc[-1]
