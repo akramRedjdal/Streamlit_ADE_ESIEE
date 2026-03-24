@@ -254,7 +254,7 @@ df = records_to_df(records)
 # Réinitialiser les filtres si un nouveau fichier est uploadé
 _file_id = uploaded.name + str(uploaded.size)
 if st.session_state.get("_last_file_id") != _file_id:
-    for key in ["filter_mod", "filter_fil_mod", "filter_promo_mod", "select_course", "select_filiere"]:
+    for key in ["filter_mod", "filter_fil_mod", "filter_promo_mod", "filter_date_mod", "select_course", "select_filiere"]:
         st.session_state.pop(key, None)
     st.session_state["_last_file_id"] = _file_id
 
@@ -336,7 +336,7 @@ with tab_mod:
         if m not in all_mods:
             all_mods.append(m)
 
-    col_f1, col_f2, col_f3 = st.columns(3)
+    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
         selected_mods = st.multiselect(
             "Filtrer par modalité",
@@ -362,6 +362,16 @@ with tab_mod:
             placeholder="Toutes les promos",
             key="filter_promo_mod",
         )
+    with col_f4:
+        date_min = df["_dtstart"].min().date()
+        date_max = df["_dtstart"].max().date()
+        date_range = st.date_input(
+            "Filtrer par période",
+            value=(date_min, date_max),
+            min_value=date_min,
+            max_value=date_max,
+            key="filter_date_mod",
+        )
 
     df_mod = df[df["Modalité"].isin(selected_mods)].copy()
     if selected_fil:
@@ -374,6 +384,12 @@ with tab_mod:
             lambda v: any(p in (v or "").split(" / ") for p in selected_promos)
         )
         df_mod = df_mod[mask]
+    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+        d_start, d_end = date_range
+        df_mod = df_mod[
+            (df_mod["_dtstart"].dt.date >= d_start) &
+            (df_mod["_dtstart"].dt.date <= d_end)
+        ]
 
     df_mod = df_mod.sort_values("_dtstart").drop(columns="_dtstart").reset_index(drop=True)
 
