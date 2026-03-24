@@ -15,7 +15,7 @@ import pandas as pd
 import streamlit as st
 
 from ade_heures import (
-    HETD_COEFFICIENTS,
+    HETD_COEFFICIENTS_ESIEE,
     HETP_COEFFICIENTS,
     MODALITY_COLORS,
     MODALITY_ORDER,
@@ -54,7 +54,7 @@ def records_to_df(records):
             "Nom":        r["nom"],
             "Filière":    r["filiere"],
             "Promo":      r["promo"],
-            "Date":       r["dtstart"].strftime("%d/%m/%Y"),
+            "Date":       r["dtstart"].strftime("%Y-%m-%d"),
             "Début":      r["dtstart"].strftime("%H:%M"),
             "Fin":        r["dtend"].strftime("%H:%M"),
             "Durée (h)":  round(r["duration_h"], 2),
@@ -80,7 +80,7 @@ def build_modality_summary(df):
         )
         .reset_index()
     )
-    grp["Coeff HETD"] = grp["Modalité"].map(HETD_COEFFICIENTS).fillna(0).round(2)
+    grp["Coeff HETD"] = grp["Modalité"].map(HETD_COEFFICIENTS_ESIEE).fillna(0).round(2)
     grp["Coeff HETP"] = grp["Modalité"].map(HETP_COEFFICIENTS).fillna(0).round(2)
     grp["Heures"] = grp["Heures"].round(2)
     grp["HETD"]   = grp["HETD"].round(2)
@@ -193,6 +193,18 @@ def make_excel_bytes(records):
     return buf.read()
 
 
+# Column config partagé : forcer 2 décimales sur toutes les colonnes numériques
+NUM_COL_CONFIG = {
+    "Durée (h)":  st.column_config.NumberColumn(format="%.2f"),
+    "HETD (h)":   st.column_config.NumberColumn(format="%.2f"),
+    "HETP (h)":   st.column_config.NumberColumn(format="%.2f"),
+    "Heures":     st.column_config.NumberColumn(format="%.2f"),
+    "HETD":       st.column_config.NumberColumn(format="%.2f"),
+    "HETP":       st.column_config.NumberColumn(format="%.2f"),
+    "Coeff HETD": st.column_config.NumberColumn(format="%.2f"),
+    "Coeff HETP": st.column_config.NumberColumn(format="%.2f"),
+}
+
 # Modality → hex color for pandas Styler (strip FF alpha prefix)
 def _hex(rrggbbaa):
     return "#" + rrggbbaa[2:]
@@ -239,6 +251,13 @@ if not records:
 
 df = records_to_df(records)
 
+# Réinitialiser les filtres si un nouveau fichier est uploadé
+_file_id = uploaded.name + str(uploaded.size)
+if st.session_state.get("_last_file_id") != _file_id:
+    for key in ["filter_mod", "filter_fil_mod", "filter_promo_mod", "select_course", "select_filiere"]:
+        st.session_state.pop(key, None)
+    st.session_state["_last_file_id"] = _file_id
+
 # ---------------------------------------------------------------------------
 # Top metrics
 # ---------------------------------------------------------------------------
@@ -246,9 +265,9 @@ df = records_to_df(records)
 st.markdown("---")
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Séances totales",  len(records))
-c2.metric("Heures totales",   f"{df['Durée (h)'].sum():.1f} h")
-c3.metric("HETD totales",     f"{df['HETD (h)'].sum():.1f}")
-c4.metric("HETP totales",     f"{df['HETP (h)'].sum():.1f}")
+c2.metric("Heures totales",   f"{df['Durée (h)'].sum():.2f} h")
+c3.metric("HETD totales",     f"{df['HETD (h)'].sum():.2f}")
+c4.metric("HETP totales",     f"{df['HETP (h)'].sum():.2f}")
 c5.metric("Cours distincts",  df["Nom"].nunique())
 
 st.markdown("---")
@@ -265,16 +284,10 @@ col_table, col_chart = st.columns([1, 1], gap="large")
 
 with col_table:
     st.dataframe(
-        style_modality(summary_df.iloc[:-1]),  # sans la ligne TOTAL pour le style
+        style_modality(summary_df.iloc[:-1]),
         use_container_width=True,
         hide_index=True,
-        column_config={
-        "HETP": st.column_config.NumberColumn(format="%.2f"),
-        "HETD": st.column_config.NumberColumn(format="%.2f"),
-        "Heures": st.column_config.NumberColumn(format="%.2f"),
-        "Coeff HETP": st.column_config.NumberColumn(format="%.2f"),
-        "Coeff HETD": st.column_config.NumberColumn(format="%.2f"),
-    },
+        column_config=NUM_COL_CONFIG,
     )
     # Ligne TOTAL en gras sous le tableau
     total_row = summary_df.iloc[-1]
@@ -362,13 +375,14 @@ with tab_mod:
         )
         df_mod = df_mod[mask]
 
-    df_mod = df_mod.drop(columns="_dtstart").sort_values("Date").reset_index(drop=True)
+    df_mod = df_mod.sort_values("_dtstart").drop(columns="_dtstart").reset_index(drop=True)
 
     st.caption(f"{len(df_mod)} séance(s) — {df_mod['Durée (h)'].sum():.2f} h — {df_mod['HETD (h)'].sum():.2f} HETD — {df_mod['HETP (h)'].sum():.2f} HETP")
     st.dataframe(
         style_modality(df_mod),
         use_container_width=True,
         hide_index=True,
+        column_config=NUM_COL_CONFIG,
     )
 
 # ---- Tab : Par nom de cours ----
@@ -376,7 +390,7 @@ with tab_cours:
     course_summary = build_course_summary(df)
 
     st.subheader("Résumé par cours")
-    st.dataframe(course_summary, use_container_width=True, hide_index=True)
+    st.dataframe(course_summary, use_container_width=True, hide_index=True, column_config=NUM_COL_CONFIG)
 
     st.subheader("Détail d'un cours")
     course_names = course_summary["Nom"].tolist()
@@ -385,8 +399,8 @@ with tab_cours:
     if selected_course:
         df_course = (
             df[df["Nom"] == selected_course]
+            .sort_values("_dtstart")
             .drop(columns="_dtstart")
-            .sort_values("Date")
             .reset_index(drop=True)
         )
         n = len(df_course)
@@ -406,6 +420,7 @@ with tab_cours:
             style_modality(df_course),
             use_container_width=True,
             hide_index=True,
+            column_config=NUM_COL_CONFIG,
         )
 
 # ---- Tab : Par filière ----
@@ -416,7 +431,7 @@ with tab_filiere:
 
     with col_fs:
         st.subheader("Récapitulatif par filière")
-        st.dataframe(fil_summary, use_container_width=True, hide_index=True)
+        st.dataframe(fil_summary, use_container_width=True, hide_index=True, column_config=NUM_COL_CONFIG)
 
     with col_fc:
         chart_fil = fil_summary[fil_summary["Filière"] != "—"].set_index("Filière")[["HETD", "HETP"]]
@@ -432,7 +447,7 @@ with tab_filiere:
         else:
             mask = df["Filière"].apply(lambda v: selected_filiere in (v or "").split(" / "))
 
-        df_fil = df[mask].drop(columns="_dtstart").sort_values("Date").reset_index(drop=True)
+        df_fil = df[mask].sort_values("_dtstart").drop(columns="_dtstart").reset_index(drop=True)
 
         cf1, cf2, cf3, cf4, cf5 = st.columns(5)
         cf1.metric("Séances",         len(df_fil))
@@ -454,10 +469,11 @@ with tab_filiere:
                 promo_grp["Heures"] = promo_grp["Heures"].round(2)
                 promo_grp["HETD"]   = promo_grp["HETD"].round(2)
                 promo_grp["HETP"]   = promo_grp["HETP"].round(2)
-                st.dataframe(promo_grp, use_container_width=True, hide_index=True)
+                st.dataframe(promo_grp, use_container_width=True, hide_index=True, column_config=NUM_COL_CONFIG)
 
         st.dataframe(
             style_modality(df_fil),
             use_container_width=True,
             hide_index=True,
+            column_config=NUM_COL_CONFIG,
         )

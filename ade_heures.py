@@ -7,8 +7,11 @@ Usage: python ade_heures.py input.ics [output.xlsx]
 
 import re
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from collections import defaultdict
+
+_PARIS_TZ = ZoneInfo("Europe/Paris")
 
 try:
     import openpyxl
@@ -77,8 +80,8 @@ def parse_dt(dt_str):
         except ValueError:
             return None
     if is_utc:
-        # Apply CET offset (+1h). Note: CEST (+2h) applies Apr-Oct; see Avertissements sheet.
-        dt = dt + timedelta(hours=1)
+        # Convertir UTC → Europe/Paris (gère CET +1h en hiver et CEST +2h en été automatiquement)
+        dt = datetime.fromtimestamp(dt.replace(tzinfo=timezone.utc).timestamp(), tz=_PARIS_TZ).replace(tzinfo=None)
     return dt
 
 
@@ -242,7 +245,7 @@ MODALITY_ORDER = ['CM', 'CM-plus', 'CM/TD', 'TD', 'TDR', 'TP', 'TP Seul', 'Oraux
 # TD=1 (référence), CM=4/3≈1.333 (2 HETP/1.5), CM-plus=5/3≈1.667 (2.5 HETP/1.5)
 # TP=1/1.5≈0.667, TP Seul=1, TDR=1.5, Oraux=1/1.5, Soutenance=1/1.5
 # CM/TD et Autre = non comptabilisé (0)
-HETD_COEFFICIENTS = {
+HETD_COEFFICIENTS_ESIEE = {
     'CM':         4 / 3,
     'CM/TD':      0,
     'CM-plus':    5 / 3,
@@ -255,6 +258,18 @@ HETD_COEFFICIENTS = {
     'Autre':      0.0,
 }
 
+HETD_COEFFICIENTS_Univ = {
+    'CM':         1.5,
+    'CM/TD':      0,
+    'CM-plus':    1.5,
+    'TD':         1.0,
+    'TDR':        1.5,
+    'TP':         1 / 1.5,
+    'TP Seul':    1.0,
+    'Oraux':      1 / 1.5,
+    'Soutenance': 1 / 1.5,
+    'Autre':      0.0,
+}
 
 HETP_COEFFICIENTS = {
     'CM':         2,
@@ -272,7 +287,7 @@ HETP_COEFFICIENTS = {
 
 def hetd(duration_h, modality):
     """Convert hours to HETD (Heures Équivalent TD)."""
-    return duration_h * HETD_COEFFICIENTS.get(modality, 0.0)
+    return duration_h * HETD_COEFFICIENTS_ESIEE.get(modality, 0.0)
 
 def hetp(duration_h, modality):
     """Convert hours to HETD (Heures Équivalent TD)."""
@@ -371,7 +386,7 @@ def write_recap_sheet(ws, records):
 
     for m in present:
         bg    = MODALITY_COLORS.get(m, MODALITY_COLORS['Autre'])
-        coeff = HETD_COEFFICIENTS.get(m, 0.0)
+        coeff = HETD_COEFFICIENTS_ESIEE.get(m, 0.0)
         coefftp = HETP_COEFFICIENTS.get(m, 0.0)
         vals  = [m, coeff,coefftp, counts[m], round(hours[m], 2), round(hetd_hours[m], 2), round(hetp_hours[m], 2)]
         for col, val in enumerate(vals, 1):
