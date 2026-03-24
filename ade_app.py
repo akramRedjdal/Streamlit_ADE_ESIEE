@@ -41,6 +41,8 @@ st.set_page_config(
 st.title("Analyse des heures d'enseignement — ADE")
 st.caption("Importez un fichier `.ics` exporté depuis ADE pour obtenir le détail et le récapitulatif de vos heures.")
 
+st.error("🔴 **Version bêta** — Cet outil est en cours de beta test. Merci de signaler toute anomalie ou erreur au doyen.")
+
 
 # ---------------------------------------------------------------------------
 # Helpers
