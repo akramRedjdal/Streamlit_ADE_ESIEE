@@ -8,6 +8,7 @@ Dépendances: streamlit, pandas, openpyxl (+ ade_heures.py dans le même dossier
 
 import io
 import os
+import re
 import tempfile
 from collections import defaultdict
 
@@ -82,8 +83,8 @@ def build_modality_summary(df):
         )
         .reset_index()
     )
-    grp["Coeff HETD"] = grp["Modalité"].map(HETD_COEFFICIENTS_ESIEE).fillna(0).round(2)
-    grp["Coeff HETP"] = grp["Modalité"].map(HETP_COEFFICIENTS).fillna(0).round(2)
+    grp["Coeff HETD"] = grp["Modalité"].apply(lambda m: HETD_COEFFICIENTS_ESIEE.get(m.replace('_Trou_ADE', ''), 0)).round(2)
+    grp["Coeff HETP"] = grp["Modalité"].apply(lambda m: HETP_COEFFICIENTS.get(m.replace('_Trou_ADE', ''), 0)).round(2)
     grp["Heures"] = grp["Heures"].round(2)
     grp["HETD"]   = grp["HETD"].round(2)
     grp["HETP"]   = grp["HETP"].round(2)
@@ -166,10 +167,19 @@ def build_filiere_summary(df):
     return grp.sort_values("Heures", ascending=False).reset_index(drop=True)
 
 
+_COURSE_SUFFIX_RE = re.compile(r'\s+(TP|TDR?|C(OURS)?)\s*\d+$', re.IGNORECASE)
+
+def normalize_course_name(name):
+    """Supprime les suffixes de groupe en fin de nom (TP1, TP2, C1, C2, TD1…)."""
+    return _COURSE_SUFFIX_RE.sub('', name).strip()
+
+
 def build_course_summary(df):
-    """Build summary table grouped by course name."""
+    """Build summary table grouped by normalized course name."""
+    df = df.copy()
+    df["_nom_base"] = df["Nom"].apply(normalize_course_name)
     grp = (
-        df.groupby("Nom", sort=False)
+        df.groupby("_nom_base", sort=False)
         .agg(
             Séances=("Nom", "count"),
             Heures=("Durée (h)", "sum"),
@@ -178,6 +188,7 @@ def build_course_summary(df):
             Modalités=("Modalité", lambda s: ", ".join(sorted(s.unique()))),
         )
         .reset_index()
+        .rename(columns={"_nom_base": "Nom"})
         .sort_values("Heures", ascending=False)
         .reset_index(drop=True)
     )
@@ -416,7 +427,7 @@ with tab_cours:
 
     if selected_course:
         df_course = (
-            df[df["Nom"] == selected_course]
+            df[df["Nom"].apply(normalize_course_name) == selected_course]
             .sort_values("_dtstart")
             .drop(columns="_dtstart")
             .reset_index(drop=True)

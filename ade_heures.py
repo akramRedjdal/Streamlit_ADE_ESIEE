@@ -193,16 +193,21 @@ def process_events(raw_events):
         modality = detect_modality(desc_lines)
 
         # Fallback : si la description ne donne aucune modalité, chercher dans le nom du cours
+        # On suffixe _Trou_ADE pour signaler que la détection est incertaine (à vérifier)
         if modality == 'Autre' and summary:
             for m, pattern in MODALITY_PATTERNS:
                 if pattern.search(summary):
-                    modality = m
+                    modality = m + '_Trou_ADE'
+                    print(modality)
                     break
 
-        # CM dispensé en E1 ou E2 → CM-plus (amphithéâtre, coefficient différent)
-        if modality == 'CM' and any(re.match(r'^E[12]', p) for p in promos):
-            modality = 'CM-plus'
-
+        # CM+ si : promo E1/E2, OU plus de 5 groupes (toutes années confondues)
+        base_mod = modality.replace("_Trou_ADE", "")
+        is_cm_plus = base_mod == 'CM' and (
+            any(re.match(r'^E[12]', p) for p in promos) or len(promos) > 5
+        )
+        if is_cm_plus:
+            modality = 'CM-plus_Trou_ADE' if '_Trou_ADE' in modality else 'CM-plus'
         records.append({
             'nom':         summary,
             'dtstart':     dtstart,
@@ -228,18 +233,33 @@ COLOR_HEADER_FONT = 'FFFFFFFF'
 COLOR_TOTAL       = 'FFFFE082'  # Amber
 
 MODALITY_COLORS = {
-    'CM':     'FFD6EAF8',  # Light blue
-    'CM-plus':'FFAED6F1',  # Medium blue (amphithéâtre E1/E2)
-    'TD':     'FFD5F5E3',  # Light green
-    'TP':     'FFFEF9E7',  # Light yellow
-    'TP Seul':'FFFDEBD0',  # Light orange
-    'TDR':    'FFF2D7D5',  # Light red
-    'CM/TD':  'FFE8DAEF',  # Light purple
-    'Oraux':  'FFD7DBDD',  # Light grey
-    'Autre':  'FFFDFEFE',  # Near-white
+    'CM':              'FFD6EAF8',  # Light blue
+    'CM_Trou_ADE':     'FFFFF3CD',  # Amber (détection incertaine)
+    'CM-plus':         'FFAED6F1',  # Medium blue (amphithéâtre E1/E2)
+    'CM-plus_Trou_ADE':'FFFFF3CD',
+    'TD':              'FFD5F5E3',  # Light green
+    'TD_Trou_ADE':     'FFFFF3CD',
+    'TDR':             'FFF2D7D5',  # Light red
+    'TDR_Trou_ADE':    'FFFFF3CD',
+    'TP':              'FFFEF9E7',  # Light yellow
+    'TP_Trou_ADE':     'FFFFF3CD',
+    'TP Seul':         'FFFDEBD0',  # Light orange
+    'TP Seul_Trou_ADE':'FFFFF3CD',
+    'CM/TD':           'FFE8DAEF',  # Light purple
+    'CM/TD_Trou_ADE':  'FFFFF3CD',
+    'Oraux':           'FFD7DBDD',  # Light grey
+    'Oraux_Trou_ADE':  'FFFFF3CD',
+    'Soutenance_Trou_ADE': 'FFFFF3CD',
+    'Autre':           'FFFDFEFE',  # Near-white
 }
 
-MODALITY_ORDER = ['CM', 'CM-plus', 'CM/TD', 'TD', 'TDR', 'TP', 'TP Seul', 'Oraux', 'Soutenance', 'Autre']
+MODALITY_ORDER = [
+    'CM', 'CM_Trou_ADE', 'CM-plus', 'CM-plus_Trou_ADE',
+    'CM/TD', 'CM/TD_Trou_ADE',
+    'TD', 'TD_Trou_ADE', 'TDR', 'TDR_Trou_ADE',
+    'TP', 'TP_Trou_ADE', 'TP Seul', 'TP Seul_Trou_ADE',
+    'Oraux', 'Oraux_Trou_ADE', 'Soutenance', 'Soutenance_Trou_ADE', 'Autre',
+]
 
 # Coefficients HETD : 1h de cours × coeff = HETD
 # TD=1 (référence), CM=4/3≈1.333 (2 HETP/1.5), CM-plus=5/3≈1.667 (2.5 HETP/1.5)
@@ -287,11 +307,13 @@ HETP_COEFFICIENTS = {
 
 def hetd(duration_h, modality):
     """Convert hours to HETD (Heures Équivalent TD)."""
-    return duration_h * HETD_COEFFICIENTS_ESIEE.get(modality, 0.0)
+    base = modality.replace('_Trou_ADE', '')
+    return duration_h * HETD_COEFFICIENTS_ESIEE.get(base, 0.0)
 
 def hetp(duration_h, modality):
-    """Convert hours to HETD (Heures Équivalent TD)."""
-    return duration_h * HETP_COEFFICIENTS.get(modality, 0.0)
+    """Convert hours to HETP (Heures Équivalent TP)."""
+    base = modality.replace('_Trou_ADE', '')
+    return duration_h * HETP_COEFFICIENTS.get(base, 0.0)
 
 
 _thin  = Side(style='thin')
