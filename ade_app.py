@@ -273,6 +273,9 @@ _COURSE_SUFFIX_RE_2 = re.compile(
 )
 _EP_RE = re.compile(r'\s*\(EP[^)]*\)', re.IGNORECASE)
 _PROJET_INTERNE_RE = re.compile(r'Projet\s+interne\s+(E[34])', re.IGNORECASE)
+_SUIVI_STAGE_RE = re.compile(r'suivi\s+de\s+stage', re.IGNORECASE)
+_SUIVI_APPRENTI_E5_RE = re.compile(r"suivi\s+d['']apprentissage\s+.*E5", re.IGNORECASE)
+_SUIVI_APPRENTI_RE = re.compile(r"suivi\s+d['']apprentissage", re.IGNORECASE)
 
 
 def normalize_course_name(name):
@@ -871,7 +874,7 @@ with tab_pdc:
 
         st.markdown(f"**Total des heures non planifiées (en HETP)** : {edited['HETP'].sum():.2f}")
 
-        st.info("**Décharges**: Entrez directement la somme des HETP correspondantes. \n\n**Projets E3**: Entrez directement la somme des HETP correspondantes, qui dépend du nombre de projets suivis et dans chacun du nombre d'élèves. Si plusieurs suiveurs, ajustez en fonction des prorata de suivis. \n\n" \
+        st.info("**Décharges**: Entrez directement la somme des HETP correspondantes. \n\n**Projets E3**: Entrez directement dans la colonne quantité, la somme des HETP correspondantes, qui dépend du nombre de projets suivis et dans chacun du nombre d'élèves. Si plusieurs suiveurs, ajustez en fonction des prorata de suivis. \n\n" \
         "👉🏼 Formule: Par suivi N_HETP = 8 + 0.5\\*NbreSemaines\\*NbreEtudiants (en 2025-26, NbreSemaines=7)")
 
         edited["HETP"] = edited["Quantité"]*edited["Tarif/unité"]
@@ -1248,16 +1251,41 @@ with tab_edutime:
                         st.warning(f"L'activité ''{activity}' n'est pas présent dans les activités importées d'ADE.")
                     ade_by_cours = ade_by_cours.drop(activity, errors="ignore")
 
-            # Edutime : cours EP + Projet E3/E4 normalisés → "Projet interne E3/E4"
+            # Attestations ADE sans correspondance directe → fusionnées sous "Autres (attestations)"
+            _ADE_AUTRES = ["Tremplin recherche", "Autre (somme en HETP)"]
+            for _lbl in _ADE_AUTRES:
+                if _lbl in ade_by_cours.index:
+                    val = ade_by_cours.pop(_lbl)
+                    ade_by_cours["Autres (attestations)"] = ade_by_cours.get("Autres (attestations)", 0) + val
+
+            # Edutime : normalisation des noms pour comparaison ADE
             _PROJET_COURT_RE = re.compile(r'^Projet\s+(E[34])$', re.IGNORECASE)
             is_projet_mask = df_edu['Cours'].str.contains(r'Projet.*E[34]', case=False, na=False, regex=True)
+            is_non_planifie_mask = mask_empty
             # noms de cours planifiés (EP) pour le coloriage
             cours_planifies = ade_ics_cours | set(df_edu[has_ep_mask]['Cours'].unique())
+
+            def _edu_norm_for_comp(row):
+                cours = str(row['Cours'])
+                hetp_val = row['HETP']
+                idx = row.name
+                if is_projet_mask[idx]:
+                    return _PROJET_COURT_RE.sub(r'Projet interne \1', cours)
+                if is_non_planifie_mask[idx]:
+                    if _SUIVI_STAGE_RE.search(cours):
+                        return "Suivis stages E3/E4" if hetp_val == 2.0 else "Suivis stages E5"
+                    if _SUIVI_APPRENTI_E5_RE.search(cours):
+                        return "Suivis apprentis E5"
+                    if _SUIVI_APPRENTI_RE.search(cours):
+                        return "Suivis apprentis E3/E4FD"
+                    if re.search(r'décharge', cours, re.IGNORECASE):
+                        return cours
+                    return "Autres (attestations)"
+                return cours
+
             edu_by_cours = (
-                df_edu[has_ep_mask | is_projet_mask | mask_empty]
-                .assign(Cours=lambda d: d['Cours'].apply(
-                    lambda v: _PROJET_COURT_RE.sub(r'Projet interne \1', str(v))
-                ))
+                df_edu[has_ep_mask | is_projet_mask | is_non_planifie_mask]
+                .assign(Cours=lambda d: d.apply(_edu_norm_for_comp, axis=1))
                 .groupby('Cours')['HETP'].sum()
                 .round(2)
             )
@@ -1304,6 +1332,7 @@ with tab_edutime:
             )
 
             st.markdown("**📙 Activités non planifiées**")
+            st.caption("ℹ️ **Autres (attestations)** regroupe côté ADE : Tremplin recherche, Autre (somme en HETP) ; côté Edutime : attestations, examens/surveillances et toute activité sans code EP ni stage/apprentissage.")
             df_a = _add_total(comp_autres)
             st.dataframe(
                 df_a.style.apply(lambda d: _style_section(d, '#fff8e1'), axis=None),
