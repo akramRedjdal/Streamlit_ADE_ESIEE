@@ -429,7 +429,7 @@ if not st.session_state.direct_api:
     # si téléchargement depuis ADE
     elif ADE_number:
 
-        ical = get_ressource_from_ADE(ADE_number, current_year=st.session_state.selected_year)
+        ical = get_ressource_from_ADE(ADE_number.replace(" ", ""), current_year=st.session_state.selected_year)
 
         uploaded = io.BytesIO(ical)
         uploaded.name = "edt.ics"
@@ -472,15 +472,19 @@ if not st.session_state.direct_api:
             st.session_state.pop(key, None)
         st.session_state["_last_file_id"] = _file_id
 else:
-    events_df, activities_df, records, df = get_from_ADE_API_cached(ADE_number)
-    teacher_name = df['instructor'].mode().iloc[0]
-    st.session_state.teacher_name = teacher_name
-    if len(teacher_name) > 0:
-        st.markdown(
-            f"<p style='margin-top:-80px;'>Nom de l'enseignant : {st.session_state.teacher_name.title()}</p>",
-            unsafe_allow_html=True,
-        )
-        #st.write(f"Nom de l'enseignant : {st.session_state.teacher_name}")
+    try:
+        events_df, activities_df, records, df = get_from_ADE_API_cached(ADE_number)
+        teacher_name = df['instructor'].mode().iloc[0]
+        st.session_state.teacher_name = teacher_name
+        if len(teacher_name) > 0:
+            st.markdown(
+                f"<p style='margin-top:-80px;'>Nom de l'enseignant : {st.session_state.teacher_name.title()}</p>",
+                unsafe_allow_html=True,
+            )
+            #st.write(f"Nom de l'enseignant : {st.session_state.teacher_name}")
+    except:
+        st.error("Une erreur s'est produite lors du traitement de l'API d'ADE -- malheureusement l'accès a été coupé :-(")
+        st.stop()
 
 
 # ---------------------------------------------------------------------------
@@ -1181,7 +1185,7 @@ with tab_edutime:
                 df_hetp_edu.loc[len(df_hetp_edu)] = ligne_total_edu
                 idx_edu.append('Total')
                 df_hetp_edu.index = idx_edu
-                st.dataframe(df_hetp_edu, width='stretch')
+                st.dataframe(df_hetp_edu, width='stretch', height="content")
 
 
             df_hetd_edu = df_hetp_edu.apply(lambda x: x * 2 / 3).rename(
@@ -1190,15 +1194,26 @@ with tab_edutime:
 
             with tab_hetd_edu:
                 st.subheader("PdC HETD (Edutime)")
-                st.dataframe(df_hetd_edu, width='stretch')
+                st.dataframe(df_hetd_edu, width='stretch', height="content")
 
             total_hreal_hetp_edu = df_hetp_edu.loc['Total', 'Total (HETP)']
             total_hreal_hetd_edu = df_hetd_edu.loc['Total', 'Total (HETD)']
             total_hcomp_hetp_edu = total_hreal_hetp_edu - total_hd_edu
             total_hcomp_hetd_edu = total_hcomp_hetp_edu * 2 / 3
 
-            st.write("Total des heures réalisées :", round(total_hreal_hetp_edu, 2), "HETP, soit", round(total_hreal_hetd_edu, 2), "HETD.")
+            total_ens = total_hreal_hetp_edu.copy()
+            allRows = df_hetp_edu.index.tolist()
+            for row in allRows:
+                if "Suivi de stage" in row:
+                    total_ens = total_ens - df_hetp_edu.loc[row, 'Total (HETP)']
+                elif "Décharge" in row:
+                    total_ens = total_ens - df_hetp_edu.loc[row, 'Total (HETP)']
 
+            st.write("Total des heures réalisées :", round(total_hreal_hetp_edu, 2), "HETP, soit", round(total_hreal_hetd_edu, 2), "HETD.")
+            st.write(f"Pourcentage enseigement pour dépassement de forfait : {total_ens} sur 500 HETP, soit {round(total_ens*100/ 500, 2)}%.")
+
+            
+            
             st.markdown("#### Synthèse des Heures")
 
             col_real_edu, col_comp_edu = st.columns(2)
