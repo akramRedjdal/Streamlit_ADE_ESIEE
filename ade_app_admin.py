@@ -283,6 +283,9 @@ _COURSE_SUFFIX_RE_2 = re.compile(
 )
 _EP_RE = re.compile(r'\s*\(EP[^)]*\)', re.IGNORECASE)
 _PROJET_INTERNE_RE = re.compile(r'Projet\s+interne\s+(E[34])', re.IGNORECASE)
+_SUIVI_STAGE_RE = re.compile(r'suivi\s+de\s+stage', re.IGNORECASE)
+_SUIVI_APPRENTI_E5_RE = re.compile(r"suivi\s+d['']apprentissage\s+.*E5", re.IGNORECASE)
+_SUIVI_APPRENTI_RE = re.compile(r"suivi\s+d['']apprentissage", re.IGNORECASE)
 
 
 def normalize_course_name(name):
@@ -441,7 +444,7 @@ if not st.session_state.direct_api:
     # si téléchargement depuis ADE
     elif ADE_number:
 
-        ical = get_ressource_from_ADE(ADE_number, current_year=st.session_state.selected_year)
+        ical = get_ressource_from_ADE(ADE_number.replace(" ", ""), current_year=st.session_state.selected_year)
 
         uploaded = io.BytesIO(ical)
         uploaded.name = "edt.ics"
@@ -484,15 +487,19 @@ if not st.session_state.direct_api:
             st.session_state.pop(key, None)
         st.session_state["_last_file_id"] = _file_id
 else:
-    events_df, activities_df, records, df = get_from_ADE_API_cached(ADE_number)
-    teacher_name = df['instructor'].mode().iloc[0]
-    st.session_state.teacher_name = teacher_name
-    if len(teacher_name) > 0:
-        st.markdown(
-            f"<p style='margin-top:-80px;'>Nom de l'enseignant : {st.session_state.teacher_name.title()}</p>",
-            unsafe_allow_html=True,
-        )
-    #df[]
+    try:
+        events_df, activities_df, records, df = get_from_ADE_API_cached(ADE_number)
+        teacher_name = df['instructor'].mode().iloc[0]
+        st.session_state.teacher_name = teacher_name
+        if len(teacher_name) > 0:
+            st.markdown(
+                f"<p style='margin-top:-80px;'>Nom de l'enseignant : {st.session_state.teacher_name.title()}</p>",
+                unsafe_allow_html=True,
+            )
+            #st.write(f"Nom de l'enseignant : {st.session_state.teacher_name}")
+    except:
+        st.error("Une erreur s'est produite lors du traitement de l'API d'ADE -- malheureusement l'accès a été coupé :-(")
+        st.stop()
 
 
 # ---------------------------------------------------------------------------
@@ -886,7 +893,7 @@ with tab_pdc:
 
         st.markdown(f"**Total des heures non planifiées (en HETP)** : {edited['HETP'].sum():.2f}")
 
-        st.info("**Décharges**: Entrez directement la somme des HETP correspondantes. \n\n**Projets E3**: Entrez directement la somme des HETP correspondantes, qui dépend du nombre de projets suivis et dans chacun du nombre d'élèves. Si plusieurs suiveurs, ajustez en fonction des prorata de suivis. \n\n" \
+        st.info("**Décharges**: Entrez directement la somme des HETP correspondantes. \n\n**Projets E3**: Entrez directement dans la colonne quantité, la somme des HETP correspondantes, qui dépend du nombre de projets suivis et dans chacun du nombre d'élèves. Si plusieurs suiveurs, ajustez en fonction des prorata de suivis. \n\n" \
         "👉🏼 Formule: Par suivi N_HETP = 8 + 0.5\\*NbreSemaines\\*NbreEtudiants (en 2025-26, NbreSemaines=7)")
 
         edited["HETP"] = edited["Quantité"]*edited["Tarif/unité"]
@@ -1195,7 +1202,7 @@ with tab_edutime:
                 df_hetp_edu.loc[len(df_hetp_edu)] = ligne_total_edu
                 idx_edu.append('Total')
                 df_hetp_edu.index = idx_edu
-                st.dataframe(df_hetp_edu, width='stretch')
+                st.dataframe(df_hetp_edu, width='stretch', height="content")
 
 
             df_hetd_edu = df_hetp_edu.apply(lambda x: x * 2 / 3).rename(
@@ -1204,15 +1211,26 @@ with tab_edutime:
 
             with tab_hetd_edu:
                 st.subheader("PdC HETD (Edutime)")
-                st.dataframe(df_hetd_edu, width='stretch')
+                st.dataframe(df_hetd_edu, width='stretch', height="content")
 
             total_hreal_hetp_edu = df_hetp_edu.loc['Total', 'Total (HETP)']
             total_hreal_hetd_edu = df_hetd_edu.loc['Total', 'Total (HETD)']
             total_hcomp_hetp_edu = total_hreal_hetp_edu - total_hd_edu
             total_hcomp_hetd_edu = total_hcomp_hetp_edu * 2 / 3
 
-            st.write("Total des heures réalisées :", round(total_hreal_hetp_edu, 2), "HETP, soit", round(total_hreal_hetd_edu, 2), "HETD.")
+            total_ens = total_hreal_hetp_edu.copy()
+            allRows = df_hetp_edu.index.tolist()
+            for row in allRows:
+                if "Suivi de stage" in row:
+                    total_ens = total_ens - df_hetp_edu.loc[row, 'Total (HETP)']
+                elif "Décharge" in row:
+                    total_ens = total_ens - df_hetp_edu.loc[row, 'Total (HETP)']
 
+            st.write("Total des heures réalisées :", round(total_hreal_hetp_edu, 2), "HETP, soit", round(total_hreal_hetd_edu, 2), "HETD.")
+            st.write(f"Pourcentage enseigement pour dépassement de forfait : {total_ens} sur 500 HETP, soit {round(total_ens*100/ 500, 2)}%.")
+
+            
+            
             st.markdown("#### Synthèse des Heures")
 
             col_real_edu, col_comp_edu = st.columns(2)
@@ -1265,16 +1283,41 @@ with tab_edutime:
                         st.warning(f"L'activité ''{activity}' n'est pas présent dans les activités importées d'ADE.")
                     ade_by_cours = ade_by_cours.drop(activity, errors="ignore")
 
-            # Edutime : cours EP + Projet E3/E4 normalisés → "Projet interne E3/E4"
+            # Attestations ADE sans correspondance directe → fusionnées sous "Autres (attestations)"
+            _ADE_AUTRES = ["Tremplin recherche", "Autre (somme en HETP)"]
+            for _lbl in _ADE_AUTRES:
+                if _lbl in ade_by_cours.index:
+                    val = ade_by_cours.pop(_lbl)
+                    ade_by_cours["Autres (attestations)"] = ade_by_cours.get("Autres (attestations)", 0) + val
+
+            # Edutime : normalisation des noms pour comparaison ADE
             _PROJET_COURT_RE = re.compile(r'^Projet\s+(E[34])$', re.IGNORECASE)
             is_projet_mask = df_edu['Cours'].str.contains(r'Projet.*E[34]', case=False, na=False, regex=True)
+            is_non_planifie_mask = mask_empty
             # noms de cours planifiés (EP) pour le coloriage
             cours_planifies = ade_ics_cours | set(df_edu[has_ep_mask]['Cours'].unique())
+
+            def _edu_norm_for_comp(row):
+                cours = str(row['Cours'])
+                hetp_val = row['HETP']
+                idx = row.name
+                if is_projet_mask[idx]:
+                    return _PROJET_COURT_RE.sub(r'Projet interne \1', cours)
+                if is_non_planifie_mask[idx]:
+                    if _SUIVI_STAGE_RE.search(cours):
+                        return "Suivis stages E3/E4" if hetp_val == 2.0 else "Suivis stages E5"
+                    if _SUIVI_APPRENTI_E5_RE.search(cours):
+                        return "Suivis apprentis E5"
+                    if _SUIVI_APPRENTI_RE.search(cours):
+                        return "Suivis apprentis E3/E4FD"
+                    if re.search(r'décharge', cours, re.IGNORECASE):
+                        return cours
+                    return "Autres (attestations)"
+                return cours
+
             edu_by_cours = (
-                df_edu[has_ep_mask | is_projet_mask | mask_empty]
-                .assign(Cours=lambda d: d['Cours'].apply(
-                    lambda v: _PROJET_COURT_RE.sub(r'Projet interne \1', str(v))
-                ))
+                df_edu[has_ep_mask | is_projet_mask | is_non_planifie_mask]
+                .assign(Cours=lambda d: d.apply(_edu_norm_for_comp, axis=1))
                 .groupby('Cours')['HETP'].sum()
                 .round(2)
             )
@@ -1321,6 +1364,7 @@ with tab_edutime:
             )
 
             st.markdown("**📙 Activités non planifiées**")
+            st.caption("ℹ️ **Autres (attestations)** regroupe côté ADE : Tremplin recherche, Autre (somme en HETP) ; côté Edutime : attestations, examens/surveillances et toute activité sans code EP ni stage/apprentissage.")
             df_a = _add_total(comp_autres)
             st.dataframe(
                 df_a.style.apply(lambda d: _style_section(d, '#fff8e1'), axis=None),
