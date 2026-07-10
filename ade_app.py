@@ -1213,6 +1213,8 @@ with tab_edutime:
                     total_ens = total_ens - df_hetp_edu.loc[row, 'Total (HETP)']
                 elif "Attestation" in row:
                     total_ens = total_ens - df_hetp_edu.loc[row, 'Total (HETP)']
+                elif "tremplin recherche" in row.lower():
+                    total_ens = total_ens - df_hetp_edu.loc[row, 'Total (HETP)']
 
             st.write("Total des heures réalisées :", round(total_hreal_hetp_edu, 2), "HETP, soit", round(total_hreal_hetd_edu, 2), "HETD.")
             st.write(f"Pourcentage enseigement pour dépassement de forfait : {total_ens} sur 500 HETP, soit {round(total_ens*100/ 500, 2)}%.")
