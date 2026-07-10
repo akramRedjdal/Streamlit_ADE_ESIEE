@@ -971,7 +971,8 @@ with tab_pdc:
         if event.selection.rows:
             activities_to_remove = list(df_hetp.index[event.selection.rows]) 
             st.session_state.activities_to_remove.extend(activities_to_remove)
-            st.write(f"Activities to remove: {activities_to_remove}")
+            storage.setItem("stored_activities_to_remove", st.session_state.activities_to_remove)
+            # st.write(f"Activities to remove: {activities_to_remove}")
             for activity in activities_to_remove:
                 if sum(df_pdc["Cours"].str.contains(activity, na=False, regex=False)) == 0:
                     st.warning(f"⚠️ L'activité ''{activity}' n'est pas présente dans les activités importées d'ADE (non planifiée ?)")
@@ -1207,6 +1208,10 @@ with tab_edutime:
                 if "Suivi de stage" in row:
                     total_ens = total_ens - df_hetp_edu.loc[row, 'Total (HETP)']
                 elif "Décharge" in row:
+                    total_ens = total_ens - df_hetp_edu.loc[row, 'Total (HETP)']
+                elif "Suivi d'apprentissage" in row:
+                    total_ens = total_ens - df_hetp_edu.loc[row, 'Total (HETP)']
+                elif "Attestation" in row:
                     total_ens = total_ens - df_hetp_edu.loc[row, 'Total (HETP)']
 
             st.write("Total des heures réalisées :", round(total_hreal_hetp_edu, 2), "HETP, soit", round(total_hreal_hetd_edu, 2), "HETD.")
