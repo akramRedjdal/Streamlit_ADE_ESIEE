@@ -368,7 +368,7 @@ with col_upload:
     uploaded = st.file_uploader(
         "Choisissez un fichier ADE (.ics)",
         type=["ics"],
-        help="Exportez votre emploi du temps depuis ADE au format iCalendar (.ics)",
+        help="Exportez votre emploi du temps depuis ADE au format iCalendar (.ics). Même procédure que pour obtenir le numéro de ressource (ADE → votre nom → Export Agenda), mais choisissez une plage temporelle couvrant l'année universitaire et cliquez sur OK plutôt que de générer l'URL.",
     )
     if uploaded: 
         st.session_state.RESSOURCE = ""
@@ -394,7 +394,7 @@ with col_ressource_help:
                     
     1. Connectez-vous sur [ADE](https://edt-consult.univ-eiffel.fr/direct/).
     2. Recherchez votre nom.
-    4. Cliquez sur **Export Agenda**.
+    3. Cliquez sur **Export Agenda**.
     4. Générez l'URL iCalendar.
     5. Copiez la valeur après `resources=`.
     """)
@@ -428,7 +428,7 @@ if not st.session_state.direct_api:
 
     # si téléchargement depuis ADE
     elif ADE_number:
-
+        st.warning("⚠️ L'export ICS via le numéro de ressource peut différer du fichier ICS téléchargé directement depuis ADE (notamment pour la modalité des séances). En cas de doute, privilégiez l'import d'un fichier `.ics` exporté manuellement depuis ADE.")
         ical = get_ressource_from_ADE(ADE_number.replace(" ", ""), current_year=st.session_state.selected_year)
 
         uploaded = io.BytesIO(ical)
