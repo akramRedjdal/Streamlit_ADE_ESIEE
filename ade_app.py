@@ -414,6 +414,8 @@ direct_api = st.checkbox("Utiliser directement l'API d'ADE ? (Test)",
                          help="Test de l'utilisation directe de l'API d'ADE au lieu de l'utilisation de l'export ICAL depuis ADE")
 st.session_state.direct_api = direct_api
 
+st.warning("⚠️ L'export ICS via le numéro de ressource peut différer du fichier ICS téléchargé directement depuis ADE (notamment pour la modalité des séances). En cas de doute, privilégiez l'import d'un fichier `.ics` exporté manuellement depuis ADE.")
+
 ical = None
 # Déclenchement
 if uploaded is None and not ADE_number and not st.session_state.direct_api:
@@ -428,7 +430,6 @@ if not st.session_state.direct_api:
 
     # si téléchargement depuis ADE
     elif ADE_number:
-        st.warning("⚠️ L'export ICS via le numéro de ressource peut différer du fichier ICS téléchargé directement depuis ADE (notamment pour la modalité des séances). En cas de doute, privilégiez l'import d'un fichier `.ics` exporté manuellement depuis ADE.")
         ical = get_ressource_from_ADE(ADE_number.replace(" ", ""), current_year=st.session_state.selected_year)
 
         uploaded = io.BytesIO(ical)
@@ -447,7 +448,7 @@ if not st.session_state.direct_api:
         st.session_state.teacher_name = teacher_name
         if len(teacher_name) > 0:
             st.markdown(
-                f"<p style='margin-top:-80px;'>Nom de l'enseignant : {st.session_state.teacher_name.title()}</p>",
+                f"Nom de l'enseignant : {st.session_state.teacher_name.title()}",
                 unsafe_allow_html=True,
             )
             #st.write(f"Nom de l'enseignant : {st.session_state.teacher_name}")
@@ -478,7 +479,7 @@ else:
         st.session_state.teacher_name = teacher_name
         if len(teacher_name) > 0:
             st.markdown(
-                f"<p style='margin-top:-80px;'>Nom de l'enseignant : {st.session_state.teacher_name.title()}</p>",
+                f"Nom de l'enseignant : {st.session_state.teacher_name.title()}",
                 unsafe_allow_html=True,
             )
             #st.write(f"Nom de l'enseignant : {st.session_state.teacher_name}")
