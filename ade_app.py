@@ -12,6 +12,8 @@ import re
 import tempfile
 import requests
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from io import StringIO
 from collections import defaultdict
 
@@ -487,6 +489,25 @@ else:
         st.error("Une erreur s'est produite lors du traitement de l'API d'ADE -- malheureusement l'accès a été coupé :-(")
         st.stop()
 
+
+# ---------------------------------------------------------------------------
+# Prochaine séance
+# ---------------------------------------------------------------------------
+
+_now = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
+_dt_debut = pd.to_datetime(df["_dtstart"])
+_dt_fin = _dt_debut + pd.to_timedelta(df["Durée (h)"], unit="h")
+_futures = df[_dt_fin > _now].assign(_debut=_dt_debut, _fin=_dt_fin).sort_values("_debut")
+if _futures.empty:
+    st.info("📅 Aucune séance à venir.")
+else:
+    _p = _futures.iloc[0]
+    _lieu = _p["Lieu"] if isinstance(_p["Lieu"], str) and _p["Lieu"].strip() else "salle non renseignée"
+    st.info(
+        f"📅 **Prochaine séance** : {_p['Nom']} ({_p['Modalité']}) — "
+        f"{_p['_debut'].strftime('%d/%m/%Y')} de {_p['_debut'].strftime('%H:%M')} à {_p['_fin'].strftime('%H:%M')} — "
+        f"📍 {_lieu}"
+    )
 
 # ---------------------------------------------------------------------------
 # Top metrics
