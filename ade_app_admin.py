@@ -38,7 +38,7 @@ from ade_heures import (
 )
 
 ANNEES = {'2025-2026':1, '2026-2027':2}
-CURRENT_YEAR = "2025-2026"
+CURRENT_YEAR = "2026-2027"
 statuts = {'80-20':400, '100-0':500, '60-40':300, 'MC UGE':288}
 activites_non_planifiees = {"Décharge (HETP)":1, "Suivis stages E3/E4":2, "Suivis stages E5":5, "Suivis apprentis E3/E4FD":12,
                                         "Suivis apprentis E5":9, "Projet interne E4":35, "Projet interne E3":1,
